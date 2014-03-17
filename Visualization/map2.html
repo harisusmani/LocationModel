@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8 />
+<title>Marker Movement</title>
+
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' />
+<link href='https://api.tiles.mapbox.com/mapbox.js/v1.6.1/mapbox.css' rel='stylesheet' />
+<link href='https://www.mapbox.com/base/latest/base.css' rel='stylesheet' />
+<script src='https://api.tiles.mapbox.com/mapbox.js/v1.6.1/mapbox.js'></script>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script> 
+
+<script src="js/csv2geojson.js"></script>
+
+<script>
+$(document).ready(function() {
+
+var map = L.mapbox.map('map', 'uzmani90.ha5ibeah');
+
+/////////////////////////////////////////////////////////
+
+//Initialize Data
+var geodata; //GeoJSON Data
+var markers;
+var window_size=30; //Minutes as used in MATLAB
+var circle_scale=40; //Scale of Drawing
+var cur_time=new Date();
+var run_mins=cur_time.getMinutes();
+var sim=0; //Simulaton or Real Time
+
+$.get('prob_data.csv',function(data){
+    createMarkers(data, function(gdata) {
+        geodata=gdata;
+        markers = [];
+        var init_data=InitGeoData(geodata);
+        var geoJson = L.geoJson(init_data, {
+        pointToLayer: function(feature, latlng) {
+            var circle = L.circleMarker(latlng, {
+                radius: 0 //Initialize at 0
+            })
+        markers.push(circle);
+        return circle;
+        }
+        }).addTo(map);
+    })
+})
+
+
+//Animate
+setInterval(function() {
+    if (!geodata || !markers) {
+        return;
+    }
+    if (sim==0)
+    {
+        cur_time=new Date();
+
+    } else {
+        cur_time.setMinutes(run_mins);
+        run_mins+=1;
+        if (run_mins==61)
+        {run_mins=1}    
+    }
+    displayTime(cur_time);
+    var percent = (cur_time.getMinutes()%window_size) / window_size;
+    var radii = getRadii(geodata);
+    updateMarkers(percent, markers, radii);
+}, 50);
+
+/////////////////////////////////////////////////////////
+
+//Function Definitions
+function displayTime(time)
+{
+x=document.getElementById("time_display");  // Find the element
+var str1= "Time: ";
+var cur_hr=time.getHours();
+var cur_min=time.getMinutes();
+     cur_hr=checkTime(cur_hr);
+     cur_min=checkTime(cur_min);
+var today=time.getDay();
+var days=["Sunday", "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+x.innerHTML="Where should I be? </br> Time: "+ cur_hr + ":"+ cur_min+ " on " + days[today];
+//x.innerHTML=str1.concat(cur_hr.concat(":").concat(cur_min).concat(" on ").concat(days[today]));
+}
+
+function checkTime(i) {
+    if (i < 10) {
+        i = "0" + i;
+    }
+    return i;
+}
+
+$('#1').click(function() {
+    sim=0;
+  console.log("RealTime Engaged.")
+});
+
+$('#2').click(function() {
+    sim=1;
+  console.log("Simulation Engaged.")
+});
+
+function createMarkers(csv_data, callback) {
+    csv2geojson.csv2geojson(csv_data, function(err,geodata){
+        if (err)
+        {
+            console.log("Error in Parsing CSV:",err);
+        }
+        callback(geodata);
+    })
+}
+
+function getRadii(geodata){
+    var my_radii= [];
+    var state_jump=24*60/window_size;
+    var today=cur_time.getDay();
+    var cur_hr=cur_time.getHours();
+    var cur_min=cur_time.getMinutes();
+    var cur_win_i=Math.floor((cur_hr*60+cur_min)/window_size);
+
+    $.each(geodata.features,function(i,feature){
+        if ( i%state_jump==cur_win_i || i%state_jump==cur_win_i+1 ){
+            switch(today){
+                case 0:
+                    my_radii.push(+feature.properties.Sun)
+                break;
+
+                case 1:
+                    my_radii.push(+feature.properties.Mon)
+                break;
+                
+                case 2:
+                    my_radii.push(+feature.properties.Tue)
+                break;
+                
+                case 3:
+                    my_radii.push(+feature.properties.Wed)
+                break;
+                
+                case 4:
+                    my_radii.push(+feature.properties.Thu)
+                break;
+                
+                case 5:
+                    my_radii.push(+feature.properties.Fri)
+                break;
+                
+                case 6:
+                    my_radii.push(+feature.properties.Sat)
+                break;
+                
+                default:
+                console.log("Day not Received from new Date()");
+                break;
+            }
+        }
+        })
+    return my_radii;
+}
+
+function updateMarkers(percent, markers, radii) {
+    var rad=0
+    $.each(markers, function(i, marker){
+    rad=radii[2*i]+((radii[2*i+1]-radii[2*i])*percent);
+    marker.setRadius(rad*circle_scale+2);
+    })
+}
+
+function InitGeoData(geodata) {
+    var my_new_data= {
+        type: "FeatureCollection",
+        features: []
+    }
+    var state_jump=24*60/window_size;
+    $.each(geodata.features,function(i,feature){
+        if (i%state_jump==1){
+            my_new_data.features.push(feature)
+        }
+    })
+    return my_new_data; 
+}
+
+//TOOLTIPS
+var geoJson = [{
+    type: 'Feature',
+    "geometry": { "type": "Point", "coordinates": [-79.94877,40.45262]},
+    "properties": {
+        "marker-symbol": "building",
+        "marker-size":"small",
+        "city": "Home Sweet Home"
+    }
+}, {
+    type: 'Feature',
+    "geometry": { "type": "Point", "coordinates": [-79.94933,40.45282]},
+    "properties": {
+        "marker-symbol": "fast-food",
+        "marker-size":"small",
+        "city": "Sheraz Pizza & Kabob"
+    }
+}, {
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.95160,40.45190]},
+    "properties": {
+        "marker-symbol": "grocery",
+        "marker-size":"small",
+        "city": "CVS Pharmacy"
+    }
+}, {
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.95254,40.45178]},
+    "properties": {
+        "marker-symbol": "restaurant",
+        "marker-size":"small",
+        "city": "K&T Chicken"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94909,40.45187]},
+    "properties": {
+        "marker-symbol": "warehouse",
+        "marker-size":"small",
+        "city": "Pakistan House"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94202,40.44343]},
+    "properties": {
+        "marker-symbol": "tennis",
+        "marker-size":"small",
+        "city": "University Center"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94461,40.44353]},
+    "properties": {
+        "marker-symbol": "college",
+        "marker-size":"small",
+        "city": "Gates Center for Computer Science"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94377,40.44116]},
+    "properties": {
+        "marker-symbol": "library",
+        "marker-size":"small",
+        "city": "Hunt Library"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94291,40.44158]},
+    "properties": {
+        "marker-symbol": "college",
+        "marker-size":"small",
+        "city": "College of Fine Arts"
+    }
+},
+{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94717,40.44173]},
+    "properties": {
+        "marker-symbol": "college",
+        "marker-size":"small",
+        "city": "Scaife Hall"
+    }
+},
+{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94665,40.44244]},
+    "properties": {
+        "marker-symbol": "college",
+        "marker-size":"small",
+        "city": "Hamerschlag Hall"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.94451,40.44253]},
+    "properties": {
+        "marker-symbol": "music",
+        "marker-size":"small",
+        "city": "Doherty Hall"
+    }
+},{
+    type: 'Feature',
+   "geometry": { "type": "Point", "coordinates": [-79.93994,40.44257]},
+    "properties": {
+        "marker-symbol": "cafe",
+        "marker-size":"small",
+        "city": "Carnegie Mellon Cafe"
+    }
+}];
+
+// Add custom popups to each using our custom feature properties
+map.featureLayer.on('layeradd', function(e) {
+    var marker = e.layer,
+        feature = marker.feature;
+
+    // Create custom popup content
+    var popupContent =  '<id="popup">' +
+                        '<h2>' + feature.properties.city + '</h2>';
+
+    // http://leafletjs.com/reference.html#popup
+    marker.bindPopup(popupContent,{
+        closeButton: false,
+        minWidth: 200
+    });
+});
+// Add features to the map
+map.featureLayer.setGeoJSON(geoJson);
+
+map.setView([40.4459, -79.93994], 15);
+})
+</script>
+
+<style>
+  body { margin:0; padding:0; }
+  #map { position:absolute; top:0; bottom:0; width:100%; z-index:-99999 ;}
+  #buttons { position:absolute; left:70px; top:15px;}
+  #popup { text-align: center;}
+  H2 { text-align: center ;}
+</style>
+</head>
+<body>
+
+<div id='buttons' class='rounded-toggle inline'>
+  <a href='#' id='1'>
+    <input id='real' type='radio' name='rtoggle' value='pizza' checked='checked'>
+  <label for='real'>Real Time Mode</label></a>
+  <a href='#' id='2'>
+  <input id='sim' type='radio' name='rtoggle' value='sim'>
+  <label for='sim'>Simulation Mode</label></a>
+</div>
+<div class='col12 clearfix'>
+  <div class='col3 pad2 margin1r fr fill-navy dark' id="time_display">Time: 11:58 pm on Monday</div>
+</div>
+
+<div id='map'></div>
+
+</body>
+</html>
